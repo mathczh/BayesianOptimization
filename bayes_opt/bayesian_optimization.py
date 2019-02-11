@@ -8,7 +8,7 @@ from .util import UtilityFunction, acq_max, ensure_rng
 
 from sklearn.gaussian_process.kernels import Matern
 from sklearn.gaussian_process import GaussianProcessRegressor
-
+#from .uk import GaussianProcessRegressor
 
 class Queue:
     def __init__(self):
@@ -165,10 +165,13 @@ class BayesianOptimization(Observable):
         util = UtilityFunction(kind=acq, kappa=kappa, xi=xi)
         iteration = 0
         while not self._queue.empty or iteration < n_iter:
+            print(1)
             try:
                 x_probe = next(self._queue)
+                print(1)
             except StopIteration:
                 x_probe = self.suggest(util)
+                print(2)
                 iteration += 1
 
             self.probe(x_probe, lazy=False)

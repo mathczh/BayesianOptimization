@@ -115,7 +115,7 @@ class UtilityFunction(object):
             mean, std = gp.predict(x, return_std=True)
 
         z = (mean - y_max - xi)/std
-        return (mean - y_max - xi) * norm.cdf(z) + std * norm.pdf(z)
+        return (mean - y_max - xi) * (1-norm.cdf(z)) + std * norm.pdf(z)
 
     @staticmethod
     def _poi(x, gp, y_max, xi):
