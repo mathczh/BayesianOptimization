@@ -4,12 +4,12 @@ from scipy.stats import norm
 from scipy.optimize import minimize
 
 
-def acq_max(ac, gp, y_max, bounds, random_state, n_warmup=1000, n_iter=250):
+def acq_max(ac, gp, y_max, bounds, random_state, n_warmup=100, n_iter=100):
     """
     A function to find the maximum of the acquisition function
 
     It uses a combination of random sampling (cheap) and the 'L-BFGS-B'
-    optimization method. First by sampling `n_warmup` (1e5) points at random,
+    optimization method. First by sampling `n_warmup` (1e3) points at random,
     and then running L-BFGS-B from `n_iter` (250) random starting points.
 
     Parameters
@@ -43,6 +43,7 @@ def acq_max(ac, gp, y_max, bounds, random_state, n_warmup=1000, n_iter=250):
     # Warm up with random points
     x_tries = random_state.uniform(bounds[:, 0], bounds[:, 1],
                                    size=(n_warmup, bounds.shape[0]))
+    print(x_tries.size())
     ys = ac(x_tries, gp=gp, y_max=y_max)
     x_max = x_tries[ys.argmax()]
     max_acq = ys.max()
