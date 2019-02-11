@@ -22,26 +22,19 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
                  optimizer="fmin_l_bfgs_b", n_restarts_optimizer=0,
                  normalize_y=False, copy_X_train=True, random_state=None):
         self.kernel = kernel
-        self.alpha = alpha
+        self.alpha = alpha   #nugget term
         self.optimizer = optimizer
         self.n_restarts_optimizer = n_restarts_optimizer
         self.normalize_y = normalize_y
         self.copy_X_train = copy_X_train
         self.random_state = random_state
-        #self.beta
-        #self.beta_0
 
-    @property
-    @deprecated("Attribute rng was deprecated in version 0.19 and "
-                "will be removed in 0.21.")
-    def rng(self):
-        return self._rng
 
-    @property
-    @deprecated("Attribute y_train_mean was deprecated in version 0.19 and "
-                "will be removed in 0.21.")
-    def y_train_mean(self):
-        return self._y_train_mean
+    #@property
+    #@deprecated("Attribute y_train_mean was deprecated in version 0.19 and "
+    #            "will be removed in 0.21.")
+    # def y_train_mean(self):
+    #     return self._y_train_mean
 
     def fit(self, X, y):
         """Fit Gaussian process regression model.
@@ -64,22 +57,22 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
         else:
             self.kernel_ = clone(self.kernel)
 
-
         self._rng = check_random_state(self.random_state)
 
         X, y = check_X_y(X, y, multi_output=True, y_numeric=True)
+        print(X)
         n, d = X.shape
-        X_ = np.append(X, np.ones([n,1]),1)
         self.n_ = n
         self.d_ = d
+        P = np.append(X, np.ones([n,1]),1)
 
         # Normalize target value
-        if self.normalize_y:
-            self._y_train_mean = np.mean(y, axis=0)
-            # demean y
-            y = y - self._y_train_mean
-        else:
-            self._y_train_mean = np.zeros(1)
+        # if self.normalize_y:
+        #     self._y_train_mean = np.mean(y, axis=0)
+        #     # demean y
+        #     y = y - self._y_train_mean
+        # else:
+        #     self._y_train_mean = np.zeros(1)
 
         if np.iterable(self.alpha) \
            and self.alpha.shape[0] != y.shape[0]:
@@ -90,9 +83,9 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
                                  " with same number of entries as y.(%d != %d)"
                                  % (self.alpha.shape[0], y.shape[0]))
 
-        self.X_train_ = np.copy(X_) if self.copy_X_train else X_
+        self.X_train_ = np.copy(X) if self.copy_X_train else X
         self.y_train_ = np.copy(y) if self.copy_X_train else y
-
+        self.P_train_ = np.copy(P) if self.copy_X_train else P
 
         if self.optimizer is not None and self.kernel_.n_dims > 0:
             # Choose hyperparameters based on maximizing the log-marginal
@@ -142,7 +135,7 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
             self.L_ = cholesky(K, lower=True)  # Line 2
             # self.L_ changed, self._K_inv needs to be recomputed
             self._K_inv = None
-            Q = np.dot(np.transpose(self.X_train_), cho_solve((self.L_, True), self.X_train_))
+            Q = np.dot(np.transpose(self.P_train_), cho_solve((self.L_, True), self.P_train_))
 
             self.M_ = cholesky(Q, lower=True)
         except np.linalg.LinAlgError as exc:
@@ -154,7 +147,7 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
             raise
 
         self.alpha_ = cho_solve((self.L_, True), self.y_train_)  # Line 3
-        self.beta = cho_solve((self.M_, True), np.dot(np.transpose(self.X_train_),self.alpha_) )
+        self.beta = cho_solve((self.M_, True), np.dot(np.transpose(self.P_train_),self.alpha_) )
 
         return self
 
@@ -209,8 +202,8 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
         if y_train.ndim == 1:
             y_train = y_train[:, np.newaxis]
         X_train = self.X_train_
-
-        Q = np.dot(np.transpose(X_train), cho_solve((L, True), X_train))
+        P = self.P_train_
+        Q = np.dot(np.transpose(P), cho_solve((L, True), P))
         try:
             M = cholesky(Q, lower=True)
         except np.linalg.LinAlgError:
@@ -218,9 +211,9 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
                 if eval_gradient else -np.inf
 
         alpha = cho_solve((L, True), y_train)
-        beta  = cho_solve((M,True), np.dot(np.transpose(X_train), alpha) )
-        y_shift = y_train - np.dot(X_train, beta)
-        alpha_ = cho_solve((L, True), y_shift )
+        beta  = cho_solve((M,True), np.dot(np.transpose(P), alpha) )
+        y_shift = y_train - np.dot(P, beta)
+        alpha_ = cho_solve((L, True), y_shift)
         self.y_shift = y_shift
 
         # Compute log-likelihood (compare line 7)
@@ -246,7 +239,6 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
 
 
     def _constrained_optimization(self, obj_func, initial_theta, bounds):
-        print(2)
         if self.optimizer == "fmin_l_bfgs_b":
             theta_opt, func_min, convergence_dict = \
                 fmin_l_bfgs_b(obj_func, initial_theta, bounds=bounds)
@@ -309,7 +301,7 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
 
         X = check_array(X)
         n, d = X.shape
-        X = np.append(X, np.ones([n,1]),1)
+        P = np.append(X, np.ones([n,1]),1)
 
         if not hasattr(self, "X_train_"):  # Unfitted;predict based on GP prior
             if self.kernel is None:
@@ -328,8 +320,8 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
                 return y_mean
         else:  # Predict based on GP posterior
             K_trans = self.kernel_(X, self.X_train_)
-            y_mean = K_trans.dot( cho_solve((self.L_, True), self.y_shift) ) + np.dot(X, self.beta)  # Line 4 (y_mean = f_star)
-            y_mean = self._y_train_mean + y_mean  # undo normal.
+            y_mean = K_trans.dot( cho_solve((self.L_, True), self.y_shift) ) + np.dot(P, self.beta)  # Line 4 (y_mean = f_star)
+            # y_mean = self._y_train_mean + y_mean  # undo normal.
             if return_cov:
                 v = cho_solve((self.L_, True), K_trans.T)  # Line 5
                 y_cov = self.kernel_(X) - K_trans.dot(v)  # Line 6
@@ -394,3 +386,10 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
                  for i in range(y_mean.shape[1])]
             y_samples = np.hstack(y_samples)
         return y_samples
+
+
+    @property
+    @deprecated("Attribute rng was deprecated in version 0.19 and "
+                "will be removed in 0.21.")
+    def rng(self):
+        return self._rng
